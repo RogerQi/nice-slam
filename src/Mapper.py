@@ -541,7 +541,7 @@ class Mapper(object):
 
     def run(self):
         cfg = self.cfg
-        idx, gt_color, gt_depth, gt_c2w = self.frame_reader[0]
+        idx, gt_color, gt_depth, gt_c2w, gt_semantic = self.frame_reader[0]
 
         self.estimate_c2w_list[0] = gt_c2w.cpu()
         init = True
@@ -568,8 +568,9 @@ class Mapper(object):
                 prefix = 'Coarse ' if self.coarse_mapper else ''
                 print(prefix+"Mapping Frame ", idx.item())
                 print(Style.RESET_ALL)
+                start_cp = time.time()
 
-            _, gt_color, gt_depth, gt_c2w = self.frame_reader[idx]
+            _, gt_color, gt_depth, gt_c2w, gt_semantic = self.frame_reader[idx]
 
             if not init:
                 lr_factor = cfg['mapping']['lr_factor']
@@ -655,3 +656,7 @@ class Mapper(object):
 
             if idx == self.n_img-1:
                 break
+        
+            if self.verbose:
+                elapsed_time = time.time() - start_cp
+                print("[MAPPER] Time used to map frame {} is {:.4f} seconds".format(idx.item(), elapsed_time))

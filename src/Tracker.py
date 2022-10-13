@@ -149,7 +149,7 @@ class Tracker(object):
         else:
             pbar = tqdm(self.frame_loader)
 
-        for idx, gt_color, gt_depth, gt_c2w in pbar:
+        for idx, gt_color, gt_depth, gt_c2w, gt_semantic in pbar:
             if not self.verbose:
                 pbar.set_description(f"Tracking Frame {idx[0]}")
 
@@ -180,6 +180,7 @@ class Tracker(object):
                 print(Fore.MAGENTA)
                 print("Tracking Frame ",  idx.item())
                 print(Style.RESET_ALL)
+                start_cp = time.time()
 
             if idx == 0 or self.gt_camera:
                 c2w = gt_c2w
@@ -256,3 +257,7 @@ class Tracker(object):
             self.idx[0] = idx
             if self.low_gpu_mem:
                 torch.cuda.empty_cache()
+            
+            if self.verbose:
+                elapsed_time = time.time() - start_cp
+                print("[TRACKER] Time used to track frame {} is {:.4f} seconds".format(idx.item(), elapsed_time))

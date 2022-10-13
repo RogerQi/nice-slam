@@ -64,7 +64,7 @@ if __name__ == '__main__':
     for i in tqdm(range(0, N+1)):
         # show every second frame for speed up
         if args.vis_input_frame and i % 2 == 0:
-            idx, gt_color, gt_depth, gt_c2w = frame_reader[i]
+            idx, gt_color, gt_depth, gt_c2w, gt_semantic = frame_reader[i]
             depth_np = gt_depth.numpy()
             color_np = (gt_color.numpy()*255).astype(np.uint8)
             depth_np = depth_np/np.max(depth_np)*255

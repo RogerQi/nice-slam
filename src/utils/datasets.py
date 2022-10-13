@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from src.common import as_intrinsics_matrix
 from torch.utils.data import Dataset
 
+from PIL import Image
 
 def readEXR_onlydepth(filename):
     """
@@ -77,6 +78,7 @@ class BaseDataset(Dataset):
     def __getitem__(self, index):
         color_path = self.color_paths[index]
         depth_path = self.depth_paths[index]
+        semantic_path = self.semantic_paths[index]
         color_data = cv2.imread(color_path)
         if '.png' in depth_path:
             depth_data = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
@@ -94,6 +96,15 @@ class BaseDataset(Dataset):
         color_data = cv2.resize(color_data, (W, H))
         color_data = torch.from_numpy(color_data)
         depth_data = torch.from_numpy(depth_data)*self.scale
+
+        # Read semantic
+        IGNORE_LABEL = 255
+        if semantic_path is None:
+            semantic_data = torch.zeros_like(depth_data) + IGNORE_LABEL
+        else:
+            semantic_data = np.array(Image.open(semantic_path))
+            semantic_data = torch.tensor(semantic_data)
+
         if self.crop_size is not None:
             # follow the pre-processing step in lietorch, actually is resize
             color_data = color_data.permute(2, 0, 1)
@@ -101,6 +112,8 @@ class BaseDataset(Dataset):
                 color_data[None], self.crop_size, mode='bilinear', align_corners=True)[0]
             depth_data = F.interpolate(
                 depth_data[None, None], self.crop_size, mode='nearest')[0, 0]
+            semantic_data = F.interpolate(
+                semantic_data[None, None], self.crop_size, mode='nearest')[0, 0]
             color_data = color_data.permute(1, 2, 0).contiguous()
 
         edge = self.crop_edge
@@ -108,9 +121,11 @@ class BaseDataset(Dataset):
             # crop image edge, there are invalid value on the edge of the color image
             color_data = color_data[edge:-edge, edge:-edge]
             depth_data = depth_data[edge:-edge, edge:-edge]
+            semantic_data = semantic_data[edge:-edge, edge:-edge]
         pose = self.poses[index]
         pose[:3, 3] *= self.scale
-        return index, color_data.to(self.device), depth_data.to(self.device), pose.to(self.device)
+
+        return index, color_data.to(self.device), depth_data.to(self.device), pose.to(self.device), semantic_data.to(self.device)
 
 
 class Replica(BaseDataset):
@@ -123,6 +138,7 @@ class Replica(BaseDataset):
             glob.glob(f'{self.input_folder}/results/depth*.png'))
         self.n_img = len(self.color_paths)
         self.load_poses(f'{self.input_folder}/traj.txt')
+        self.semantic_paths = [None for i in range(self.n_img)]
 
     def load_poses(self, path):
         self.poses = []
@@ -148,6 +164,7 @@ class Azure(BaseDataset):
         self.n_img = len(self.color_paths)
         self.load_poses(os.path.join(
             self.input_folder, 'scene', 'trajectory.log'))
+        self.semantic_paths = [None for i in range(self.n_img)]
 
     def load_poses(self, path):
         self.poses = []
@@ -189,6 +206,16 @@ class ScanNet(BaseDataset):
             self.input_folder, 'depth', '*.png')), key=lambda x: int(os.path.basename(x)[:-4]))
         self.load_poses(os.path.join(self.input_folder, 'pose'))
         self.n_img = len(self.color_paths)
+        if True:
+            self.n_img = 50
+        self.semantic_paths = []
+        semantic_folder = os.path.join(self.input_folder, 'semantics')
+        for i in range(self.n_img):
+            semantic_path_guess = os.path.join(semantic_folder, '{}.png'.format(i))
+            if os.path.exists(semantic_path_guess):
+                self.semantic_paths.append(semantic_path_guess)
+            else:
+                self.semantic_paths.append(None)
 
     def load_poses(self, path):
         self.poses = []
@@ -219,6 +246,7 @@ class CoFusion(BaseDataset):
             self.input_folder, 'depth_noise', '*.exr')))
         self.n_img = len(self.color_paths)
         self.load_poses(os.path.join(self.input_folder, 'trajectories'))
+        self.semantic_paths = [None for i in range(self.n_img)]
 
     def load_poses(self, path):
         # We tried, but cannot align the coordinate frame of cofusion to ours.
@@ -238,6 +266,7 @@ class TUM_RGBD(BaseDataset):
         self.color_paths, self.depth_paths, self.poses = self.loadtum(
             self.input_folder, frame_rate=32)
         self.n_img = len(self.color_paths)
+        self.semantic_paths = [None for i in range(self.n_img)]
 
     def parse_list(self, filepath, skiprows=0):
         """ read list data """
