@@ -68,7 +68,7 @@ class Tracker(object):
                                      renderer=self.renderer, verbose=self.verbose, device=self.device)
         self.H, self.W, self.fx, self.fy, self.cx, self.cy = slam.H, slam.W, slam.fx, slam.fy, slam.cx, slam.cy
 
-    def optimize_cam_in_batch(self, camera_tensor, gt_color, gt_depth, batch_size, optimizer):
+    def optimize_cam_in_batch(self, camera_tensor, gt_color, gt_depth, gt_semantic, batch_size, optimizer):
         """
         Do one iteration of camera iteration. Sample pixels, render depth/color, calculate loss and backpropagation.
 
@@ -88,8 +88,8 @@ class Tracker(object):
         c2w = get_camera_from_tensor(camera_tensor)
         Wedge = self.ignore_edge_W
         Hedge = self.ignore_edge_H
-        batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color = get_samples(
-            Hedge, H-Hedge, Wedge, W-Wedge, batch_size, H, W, fx, fy, cx, cy, c2w, gt_depth, gt_color, self.device)
+        batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color, batch_gt_semantic = get_samples(
+            Hedge, H-Hedge, Wedge, W-Wedge, batch_size, H, W, fx, fy, cx, cy, c2w, gt_depth, gt_color, gt_semantic, self.device)
         if self.nice:
             # should pre-filter those out of bounding box depth value
             with torch.no_grad():
@@ -105,7 +105,7 @@ class Tracker(object):
 
         ret = self.renderer.render_batch_ray(
             self.c, self.decoders, batch_rays_d, batch_rays_o,  self.device, stage='color',  gt_depth=batch_gt_depth)
-        depth, uncertainty, color = ret
+        depth, uncertainty, color, semantic = ret
 
         uncertainty = uncertainty.detach()
         if self.handle_dynamic:
@@ -156,6 +156,7 @@ class Tracker(object):
             idx = idx[0]
             gt_depth = gt_depth[0]
             gt_color = gt_color[0]
+            gt_semantic = gt_semantic[0]
             gt_c2w = gt_c2w[0]
 
             if self.sync_method == 'strict':
@@ -231,7 +232,7 @@ class Tracker(object):
                         idx, cam_iter, gt_depth, gt_color, camera_tensor, self.c, self.decoders)
 
                     loss = self.optimize_cam_in_batch(
-                        camera_tensor, gt_color, gt_depth, self.tracking_pixels, optimizer_camera)
+                        camera_tensor, gt_color, gt_depth, gt_semantic, self.tracking_pixels, optimizer_camera)
 
                     if cam_iter == 0:
                         initial_loss = loss

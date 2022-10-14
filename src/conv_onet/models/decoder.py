@@ -109,10 +109,13 @@ class MLP(nn.Module):
 
     def __init__(self, name='', dim=3, c_dim=128,
                  hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear',
-                 color=False, skips=[2], grid_len=0.16, pos_embedding_method='fourier', concat_feature=False):
+                 color=False, skips=[2], grid_len=0.16, pos_embedding_method='fourier', concat_feature=False, num_classes=-1):
         super().__init__()
         self.name = name
         self.color = color
+        self.num_classes = num_classes
+        if num_classes != -1:
+            assert not self.color
         self.no_grad_feature = False
         self.c_dim = c_dim
         self.grid_len = grid_len
@@ -133,7 +136,8 @@ class MLP(nn.Module):
             embedding_size = 3
             self.embedder = Same()
         elif pos_embedding_method == 'nerf':
-            if 'color' in name:
+            # TODO: test if semantic head should use the same setting as color
+            if 'color' in name or 'semantic' in name:
                 multires = 10
                 self.embedder = Nerf_positional_embedding(
                     multires, log_sampling=True)
@@ -155,8 +159,14 @@ class MLP(nn.Module):
             self.output_linear = DenseLayer(
                 hidden_size, 4, activation="linear")
         else:
-            self.output_linear = DenseLayer(
-                hidden_size, 1, activation="linear")
+            if num_classes == -1:
+                self.output_linear = DenseLayer(
+                    hidden_size, 1, activation="linear")
+            else:
+                # semantic head
+                # +1 is for occupancy
+                self.output_linear = DenseLayer(
+                    hidden_size, num_classes + 1, activation="linear")
 
         if not leaky:
             self.actvn = F.relu
@@ -198,7 +208,7 @@ class MLP(nn.Module):
             if i in self.skips:
                 h = torch.cat([embedded_pts, h], -1)
         out = self.output_linear(h)
-        if not self.color:
+        if (not self.color) and (self.num_classes == -1):
             out = out.squeeze(-1)
         return out
 
@@ -308,6 +318,14 @@ class NICE(nn.Module):
         self.color_decoder = MLP(name='color', dim=dim, c_dim=c_dim, color=True,
                                  skips=[2], n_blocks=5, hidden_size=hidden_size,
                                  grid_len=color_grid_len, pos_embedding_method=pos_embedding_method)
+        if True:
+            # TODO: move these numbers to config
+            semantic_grid_len = color_grid_len
+            # TODO: NICE-SLAM hardcodes the raw output to 4-channel.
+            num_classes = 3
+        self.semantic_decoder = MLP(name='semantic', dim=dim, c_dim=c_dim, color=False,
+                                 skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                 grid_len=semantic_grid_len, pos_embedding_method=pos_embedding_method, num_classes=num_classes)
 
     def forward(self, p, c_grid, stage='middle', **kwargs):
         """
@@ -336,6 +354,13 @@ class NICE(nn.Module):
         elif stage == 'color':
             fine_occ = self.fine_decoder(p, c_grid)
             raw = self.color_decoder(p, c_grid)
+            middle_occ = self.middle_decoder(p, c_grid)
+            middle_occ = middle_occ.squeeze(0)
+            raw[..., -1] = fine_occ+middle_occ
+            return raw
+        elif stage == 'semantic':
+            fine_occ = self.fine_decoder(p, c_grid)
+            raw = self.semantic_decoder(p, c_grid)
             middle_occ = self.middle_decoder(p, c_grid)
             middle_occ = middle_occ.squeeze(0)
             raw[..., -1] = fine_occ+middle_occ

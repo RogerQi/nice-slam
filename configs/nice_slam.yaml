@@ -43,8 +43,9 @@ tracking:
 mapping:
   device: "cuda:0"
   color_refine: True
-  middle_iter_ratio: 0.4
-  fine_iter_ratio: 0.6
+  middle_iter_ratio: 0.3 # vanilla 0.4 60*0.4=24
+  fine_iter_ratio: 0.45 # vanilla 0.6 60*0.6=36
+  color_iter_ratio: 0.75
   every_frame: 5
   BA: True
   BA_cam_lr: 0.001
@@ -67,7 +68,7 @@ mapping:
   lr_factor: 1
   pixels: 1000
   iters_first: 1500
-  iters: 60
+  iters: 80
   stage:
     coarse:
       decoders_lr: 0.0
@@ -75,24 +76,35 @@ mapping:
       middle_lr: 0.0
       fine_lr: 0.0
       color_lr: 0.0
+      semantic_lr: 0.0
     middle:
       decoders_lr: 0.0
       coarse_lr: 0.0
       middle_lr: 0.1
       fine_lr: 0.0
       color_lr: 0.0
+      semantic_lr: 0.0
     fine:
       decoders_lr: 0.0
       coarse_lr: 0.0
       middle_lr: 0.005
       fine_lr: 0.005
       color_lr: 0.0
+      semantic_lr: 0.0
     color:
       decoders_lr: 0.005
       coarse_lr: 0.0
       middle_lr: 0.005
       fine_lr: 0.005
       color_lr: 0.005
+      semantic_lr: 0.0
+    semantic:
+      decoders_lr: 0.005
+      coarse_lr: 0.0
+      middle_lr: 0.005
+      fine_lr: 0.005
+      color_lr: 0.0
+      semantic_lr: 0.005
 cam:
   H: 680
   W: 1200

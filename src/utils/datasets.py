@@ -100,9 +100,10 @@ class BaseDataset(Dataset):
         # Read semantic
         IGNORE_LABEL = 255
         if semantic_path is None:
-            semantic_data = torch.zeros_like(depth_data) + IGNORE_LABEL
+            semantic_data = torch.zeros_like(depth_data).to(torch.uint8) + IGNORE_LABEL
         else:
             semantic_data = np.array(Image.open(semantic_path))
+            semantic_data = cv2.resize(semantic_data, (W, H), interpolation=cv2.INTER_NEAREST)
             semantic_data = torch.tensor(semantic_data)
 
         if self.crop_size is not None:

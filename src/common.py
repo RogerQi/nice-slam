@@ -89,7 +89,7 @@ def get_rays_from_uv(i, j, c2w, H, W, fx, fy, cx, cy, device):
     return rays_o, rays_d
 
 
-def select_uv(i, j, n, depth, color, device='cuda:0'):
+def select_uv(i, j, n, depth, color, semantic, device='cuda:0'):
     """
     Select n uv from dense uv.
 
@@ -102,36 +102,39 @@ def select_uv(i, j, n, depth, color, device='cuda:0'):
     j = j[indices]  # (n)
     depth = depth.reshape(-1)
     color = color.reshape(-1, 3)
+    semantic = semantic.reshape(-1)
     depth = depth[indices]  # (n)
     color = color[indices]  # (n,3)
-    return i, j, depth, color
+    semantic = semantic[indices] # (n)
+    return i, j, depth, color, semantic
 
 
-def get_sample_uv(H0, H1, W0, W1, n, depth, color, device='cuda:0'):
+def get_sample_uv(H0, H1, W0, W1, n, depth, color, semantic, device='cuda:0'):
     """
     Sample n uv coordinates from an image region H0..H1, W0..W1
 
     """
     depth = depth[H0:H1, W0:W1]
     color = color[H0:H1, W0:W1]
+    semantic = semantic[H0:H1, W0:W1]
     i, j = torch.meshgrid(torch.linspace(
         W0, W1-1, W1-W0).to(device), torch.linspace(H0, H1-1, H1-H0).to(device))
     i = i.t()  # transpose
     j = j.t()
-    i, j, depth, color = select_uv(i, j, n, depth, color, device=device)
-    return i, j, depth, color
+    i, j, depth, color, semantic = select_uv(i, j, n, depth, color, semantic, device=device)
+    return i, j, depth, color, semantic
 
 
-def get_samples(H0, H1, W0, W1, n, H, W, fx, fy, cx, cy, c2w, depth, color, device):
+def get_samples(H0, H1, W0, W1, n, H, W, fx, fy, cx, cy, c2w, depth, color, semantic, device):
     """
     Get n rays from the image region H0..H1, W0..W1.
     c2w is its camera pose and depth/color is the corresponding image tensor.
 
     """
-    i, j, sample_depth, sample_color = get_sample_uv(
-        H0, H1, W0, W1, n, depth, color, device=device)
+    i, j, sample_depth, sample_color, sample_semantic = get_sample_uv(
+        H0, H1, W0, W1, n, depth, color, semantic, device=device)
     rays_o, rays_d = get_rays_from_uv(i, j, c2w, H, W, fx, fy, cx, cy, device)
-    return rays_o, rays_d, sample_depth, sample_color
+    return rays_o, rays_d, sample_depth, sample_color, sample_semantic
 
 
 def quad2rotation(quad):
@@ -235,14 +238,18 @@ def raw2outputs_nerf_color(raw, z_vals, rays_d, occupancy=False, device='cuda:0'
     else:
         # original nerf, volume density
         alpha = raw2alpha(raw[..., -1], dists)  # (N_rays, N_samples)
+    
+    # Compute semantic logits
+    semantic = raw[..., :-1] # N_rays, N_samples+N_surface, -1
 
     weights = alpha.float() * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1)).to(
         device).float(), (1.-alpha + 1e-10).float()], -1).float(), -1)[:, :-1]
     rgb_map = torch.sum(weights[..., None] * rgb, -2)  # (N_rays, 3)
     depth_map = torch.sum(weights * z_vals, -1)  # (N_rays)
+    semantic_map = torch.sum(weights[..., None] * semantic, -2) # (N_raws, num_classes)
     tmp = (z_vals-depth_map.unsqueeze(-1))  # (N_rays, N_samples)
     depth_var = torch.sum(weights*tmp*tmp, dim=1)  # (N_rays)
-    return depth_map, depth_var, rgb_map, weights
+    return depth_map, depth_var, rgb_map, semantic_map, weights
 
 
 def get_rays(H, W, fx, fy, cx, cy, c2w, device):

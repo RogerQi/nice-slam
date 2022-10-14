@@ -153,6 +153,7 @@ class NICE_SLAM():
             self.shared_decoders.middle_decoder.bound = self.bound
             self.shared_decoders.fine_decoder.bound = self.bound
             self.shared_decoders.color_decoder.bound = self.bound
+            self.shared_decoders.semantic_decoder.bound = self.bound
             if self.coarse:
                 self.shared_decoders.coarse_decoder.bound = self.bound*self.coarse_bound_enlarge
 
@@ -246,6 +247,17 @@ class NICE_SLAM():
         val_shape = [1, c_dim, *color_val_shape]
         color_val = torch.zeros(val_shape).normal_(mean=0, std=0.01)
         c[color_key] = color_val
+
+        semantic_key = 'grid_semantic'
+        if True:
+            # TODO: specify one for semantics
+            semantic_grid_len = color_grid_len
+        semantic_val_shape = list(map(int, (xyz_len/semantic_grid_len).tolist()))
+        semantic_val_shape[0], semantic_val_shape[2] = semantic_val_shape[2], semantic_val_shape[0]
+        self.semantic_val_shape = semantic_val_shape
+        val_shape = [1, c_dim, *semantic_val_shape]
+        semantic_val = torch.zeros(val_shape).normal_(mean=0, std=0.01)
+        c[semantic_key] = semantic_val
 
         self.shared_c = c
 
