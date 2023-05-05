@@ -226,9 +226,11 @@ class Renderer(object):
             depth_list = []
             uncertainty_list = []
             color_list = []
+            semantic_list = []
 
             ray_batch_size = self.ray_batch_size
-            gt_depth = gt_depth.reshape(-1)
+            if gt_depth is not None:
+                gt_depth = gt_depth.reshape(-1)
 
             for i in range(0, rays_d.shape[0], ray_batch_size):
                 rays_d_batch = rays_d[i:i+ray_batch_size]
@@ -245,15 +247,21 @@ class Renderer(object):
                 depth_list.append(depth.double())
                 uncertainty_list.append(uncertainty.double())
                 color_list.append(color)
+                semantic_list.append(semantic)
 
             depth = torch.cat(depth_list, dim=0)
             uncertainty = torch.cat(uncertainty_list, dim=0)
             color = torch.cat(color_list, dim=0)
+            semantic = torch.cat(semantic_list, dim=0)
 
             depth = depth.reshape(H, W)
             uncertainty = uncertainty.reshape(H, W)
             color = color.reshape(H, W, 3)
-            return depth, uncertainty, color
+
+            semantic = semantic.reshape((H, W, -1))
+            semantic = torch.argmax(semantic, dim=2)
+            assert semantic.shape == (H, W)
+            return depth, uncertainty, color, semantic
 
     # this is only for imap*
     def regulation(self, c, decoders, rays_d, rays_o, gt_depth, device, stage='color'):

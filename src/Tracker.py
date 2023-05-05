@@ -187,7 +187,7 @@ class Tracker(object):
                 c2w = gt_c2w
                 if not self.no_vis_on_first_frame:
                     self.visualizer.vis(
-                        idx, 0, gt_depth, gt_color, c2w, self.c, self.decoders)
+                        idx, 0, gt_depth, gt_color, gt_semantic, c2w, self.c, self.decoders)
 
             else:
                 gt_camera_tensor = get_tensor_from_camera(gt_c2w)
@@ -229,7 +229,7 @@ class Tracker(object):
                         camera_tensor = torch.cat([quad, T], 0).to(self.device)
 
                     self.visualizer.vis(
-                        idx, cam_iter, gt_depth, gt_color, camera_tensor, self.c, self.decoders)
+                        idx, cam_iter, gt_depth, gt_color, gt_semantic, camera_tensor, self.c, self.decoders)
 
                     loss = self.optimize_cam_in_batch(
                         camera_tensor, gt_color, gt_depth, gt_semantic, self.tracking_pixels, optimizer_camera)
@@ -256,8 +256,9 @@ class Tracker(object):
             self.gt_c2w_list[idx] = gt_c2w.clone().cpu()
             pre_c2w = c2w.clone()
             self.idx[0] = idx
-            if self.low_gpu_mem:
-                torch.cuda.empty_cache()
+            self.visualizer.vis_semantic(idx, c2w, self.c, self.decoders)
+
+            time.sleep(5)
             
             if self.verbose:
                 elapsed_time = time.time() - start_cp

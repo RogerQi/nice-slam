@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.common import get_camera_from_tensor
 
+from PIL import Image
 
 class Visualizer(object):
     """
@@ -20,8 +21,57 @@ class Visualizer(object):
         self.renderer = renderer
         self.inside_freq = inside_freq
         os.makedirs(f'{vis_dir}', exist_ok=True)
+    
+    def vis_semantic(self, idx, c2w_or_camera_tensor, c, decoders):
+        """
+        Visualization of depth, color images and save to file.
 
-    def vis(self, idx, iter, gt_depth, gt_color, c2w_or_camera_tensor, c,
+        Args:
+            idx (int): current frame index.
+            iter (int): the iteration number.
+            gt_depth (tensor): ground truth depth image of the current frame.
+            gt_color (tensor): ground truth color image of the current frame.
+            c2w_or_camera_tensor (tensor): camera pose, represented in 
+                camera to world matrix or quaternion and translation tensor.
+            c (dicts): feature grids.
+            decoders (nn.module): decoders.
+        """
+        with torch.no_grad():
+            if len(c2w_or_camera_tensor.shape) == 1:
+                bottom = torch.from_numpy(
+                    np.array([0, 0, 0, 1.]).reshape([1, 4])).type(
+                        torch.float32).to(self.device)
+                c2w = get_camera_from_tensor(
+                    c2w_or_camera_tensor.clone().detach())
+                c2w = torch.cat([c2w, bottom], dim=0)
+            else:
+                c2w = c2w_or_camera_tensor
+
+            # depth, uncertainty, color, _ = self.renderer.render_img(
+            #     c,
+            #     decoders,
+            #     c2w,
+            #     self.device,
+            #     stage='color',
+            #     gt_depth=None)
+            # depth_np = depth.detach().cpu().numpy()
+            # color_np = color.detach().cpu().numpy()
+            _, _, _, semantic = self.renderer.render_img(
+                c,
+                decoders,
+                c2w,
+                self.device,
+                stage='semantic',
+                gt_depth=None)
+            semantic_np = semantic.detach().cpu().numpy().astype(np.uint8)
+
+            save_path = f'{self.vis_dir}/semantic_{idx:05d}.png'
+
+            print("Saving to ", save_path, "...")
+
+            Image.fromarray(semantic_np).save(save_path)
+
+    def vis(self, idx, iter, gt_depth, gt_color, gt_semantic, c2w_or_camera_tensor, c,
             decoders):
         """
         Visualization of depth, color images and save to file.
@@ -40,6 +90,12 @@ class Visualizer(object):
             if (idx % self.freq == 0) and (iter % self.inside_freq == 0):
                 gt_depth_np = gt_depth.cpu().numpy()
                 gt_color_np = gt_color.cpu().numpy()
+                gt_semantic_np = gt_semantic.cpu().numpy()
+
+                if True:
+                    # TODO: don't use hardwired 255 as IGNORE_LABEL?
+                    gt_semantic_np[gt_semantic_np == 255] = 0
+                
                 if len(c2w_or_camera_tensor.shape) == 1:
                     bottom = torch.from_numpy(
                         np.array([0, 0, 0, 1.]).reshape([1, 4])).type(
@@ -50,22 +106,34 @@ class Visualizer(object):
                 else:
                     c2w = c2w_or_camera_tensor
 
-                depth, uncertainty, color = self.renderer.render_img(
+                depth, uncertainty, color, _ = self.renderer.render_img(
                     c,
                     decoders,
                     c2w,
                     self.device,
                     stage='color',
                     gt_depth=gt_depth)
+                _, _, _, semantic = self.renderer.render_img(
+                    c,
+                    decoders,
+                    c2w,
+                    self.device,
+                    stage='semantic',
+                    gt_depth=gt_depth)
                 depth_np = depth.detach().cpu().numpy()
                 color_np = color.detach().cpu().numpy()
+                semantic_np = semantic.detach().cpu().numpy()
                 depth_residual = np.abs(gt_depth_np - depth_np)
                 depth_residual[gt_depth_np == 0.0] = 0.0
                 color_residual = np.abs(gt_color_np - color_np)
                 color_residual[gt_depth_np == 0.0] = 0.0
 
-                fig, axs = plt.subplots(2, 3)
+                semantic_residual = (gt_semantic_np != semantic_np).astype(np.uint8)
+
+                fig, axs = plt.subplots(3, 3)
                 fig.tight_layout()
+
+                # Depth
                 max_depth = np.max(gt_depth_np)
                 axs[0, 0].imshow(gt_depth_np, cmap="plasma",
                                  vmin=0, vmax=max_depth)
@@ -82,6 +150,8 @@ class Visualizer(object):
                 axs[0, 2].set_title('Depth Residual')
                 axs[0, 2].set_xticks([])
                 axs[0, 2].set_yticks([])
+
+                # Color
                 gt_color_np = np.clip(gt_color_np, 0, 1)
                 color_np = np.clip(color_np, 0, 1)
                 color_residual = np.clip(color_residual, 0, 1)
@@ -97,6 +167,21 @@ class Visualizer(object):
                 axs[1, 2].set_title('RGB Residual')
                 axs[1, 2].set_xticks([])
                 axs[1, 2].set_yticks([])
+
+                # Semantic
+                axs[2, 0].imshow(gt_semantic_np, cmap="plasma")
+                axs[2, 0].set_title('Input Semantic')
+                axs[2, 0].set_xticks([])
+                axs[2, 0].set_yticks([])
+                axs[2, 1].imshow(semantic_np, cmap="plasma")
+                axs[2, 1].set_title('Generated Semantic')
+                axs[2, 1].set_xticks([])
+                axs[2, 1].set_yticks([])
+                axs[2, 2].imshow(semantic_residual, cmap="plasma")
+                axs[2, 2].set_title('Mismatched Semantics')
+                axs[2, 2].set_xticks([])
+                axs[2, 2].set_yticks([])
+
                 plt.subplots_adjust(wspace=0, hspace=0)
                 plt.savefig(
                     f'{self.vis_dir}/{idx:05d}_{iter:04d}.jpg', bbox_inches='tight', pad_inches=0.2)

@@ -440,7 +440,7 @@ class Mapper(object):
 
             if (not (idx == 0 and self.no_vis_on_first_frame)) and ('Demo' not in self.output):
                 self.visualizer.vis(
-                    idx, joint_iter, cur_gt_depth, cur_gt_color, cur_c2w, self.c, self.decoders)
+                    idx, joint_iter, cur_gt_depth, cur_gt_color, cur_gt_semantic, cur_c2w, self.c, self.decoders)
 
             optimizer.zero_grad()
             batch_rays_d_list = []
@@ -517,7 +517,7 @@ class Mapper(object):
                 # Raw and unnormalized
                 semantic_loss = F.cross_entropy(semantic, batch_gt_semantic.long(), ignore_index=255, reduction='mean')
                 # TODO: move this coefficient to cfg
-                weighted_semantic_loss = 0.04*semantic_loss
+                weighted_semantic_loss = 1*semantic_loss
                 loss += weighted_semantic_loss
 
             # for imap*, it uses volume density
@@ -644,6 +644,9 @@ class Mapper(object):
                         self.keyframe_list.append(idx)
                         self.keyframe_dict.append({'gt_c2w': gt_c2w.cpu(), 'idx': idx, 'color': gt_color.cpu(
                         ), 'depth': gt_depth.cpu(), 'semantic': gt_semantic.cpu(), 'est_c2w': cur_c2w.clone()})
+            
+            # Do visualization
+            self.visualizer.vis_semantic(idx, cur_c2w, self.c, self.decoders)
 
             if self.low_gpu_mem:
                 torch.cuda.empty_cache()
