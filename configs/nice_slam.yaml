@@ -45,7 +45,7 @@ mapping:
   color_refine: True
   middle_iter_ratio: 0.3 # vanilla 0.4 60*0.4=24
   fine_iter_ratio: 0.45 # vanilla 0.6 60*0.6=36
-  color_iter_ratio: 0.75
+  color_iter_ratio: 0.7
   every_frame: 5
   BA: True
   BA_cam_lr: 0.001
@@ -104,7 +104,7 @@ mapping:
       middle_lr: 0.005
       fine_lr: 0.005
       color_lr: 0.0
-      semantic_lr: 0.005
+      semantic_lr: 0.01
 cam:
   H: 680
   W: 1200
